@@ -16,23 +16,28 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. お手本画像の読み込み (.jpgに対応) ---
+# --- 2. APIキーの設定 (Secretsから自動読み込み) ---
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+else:
+    st.error("APIキーが設定されていません。StreamlitのSecretsに 'GEMINI_API_KEY' を登録してください。")
+    st.stop()
+
+# --- 3. お手本画像の読み込み ---
 STYLE_IMAGE_PATH = "style.jpg" 
 
 def get_style_image():
-    # .jpg が存在するかチェック
     if os.path.exists(STYLE_IMAGE_PATH):
         return Image.open(STYLE_IMAGE_PATH)
     return None
 
 style_img = get_style_image()
 
-# --- 3. サイドバー ---
+# --- 4. サイドバー ---
 with st.sidebar:
     st.title("🐻 Shirokuma Studio")
-    api_key = st.text_input("Gemini API Key", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
+    st.caption("✅ APIキー接続済み")
     
     st.divider()
     if style_img:
@@ -40,17 +45,16 @@ with st.sidebar:
         st.image(style_img, caption="このシロクマをお手本にします", use_container_width=True)
     else:
         st.error(f"エラー: '{STYLE_IMAGE_PATH}' が見つかりません。")
-        st.info("app.pyと同じフォルダに 'style.jpg' を置いてください。")
 
     uploaded_file = st.file_uploader("変換したい元の画像", type=["png", "jpg", "jpeg"])
 
-# --- 4. メインコンテンツ ---
+# --- 5. メインコンテンツ ---
 st.title("🎨 しろくまスタイル変換ジェネレーター")
 
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = ""
 
-if uploaded_file and api_key and style_img:
+if uploaded_file and style_img:
     source_img = Image.open(uploaded_file)
     col1, col2 = st.columns(2, gap="large")
 
@@ -67,10 +71,9 @@ if uploaded_file and api_key and style_img:
         if st.button("お手本に合わせて呪文を生成"):
             with st.status("2枚の画像を融合して分析中...") as status:
                 try:
-                    # 最新モデル Gemini 3 Flash Preview を使用
+                    # 先ほど動作したモデル名を使用
                     model = genai.GenerativeModel('gemini-3-flash-preview')
                     
-                    # 2枚の画像を融合させる強力なプロンプト
                     instruction = """
                     あなたは、既存のキャラクターデザインの「スタイル」を別の要素へ移植するプロフェッショナルです。
                     
@@ -87,12 +90,18 @@ if uploaded_file and api_key and style_img:
                     ■英語プロンプト: そのままコピーしてImageFX等の生成AIで使える、詳細な英文。
                     """
                     
-                    # 2枚の画像とお手本を同時に渡す
                     response = model.generate_content([instruction, style_img, source_img])
                     st.session_state.analysis_result = response.text
                     status.update(label="融合完了！", state="complete")
                 except Exception as e:
-                    st.error(f"エラーが発生しました: {e}")
+                    # もし gemini-3-flash-preview が使えなかった時のための予備
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        response = model.generate_content([instruction, style_img, source_img])
+                        st.session_state.analysis_result = response.text
+                        status.update(label="融合完了！(v1.5)", state="complete")
+                    except Exception as e2:
+                        st.error(f"エラーが発生しました: {e2}")
 
         if st.session_state.analysis_result:
             st.text_area("生成結果", value=st.session_state.analysis_result, height=200)
@@ -112,4 +121,4 @@ if uploaded_file and api_key and style_img:
             st.link_button("🚀 ImageFXを開く", "https://aitestkitchen.withgoogle.com/tools/image-fx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 else:
-    st.info("APIキーを入力し、変換したい画像をアップロードしてください。")
+    st.info("変換したい画像をアップロードしてください。")
