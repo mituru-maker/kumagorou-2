@@ -1,7 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import streamlit.components.v1 as components
 import os
 
 # ページ設定
@@ -11,50 +10,43 @@ st.set_page_config(page_title="しろくまスタジオ", layout="wide")
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("SecretsにGEMINI_API_KEYが設定されていません。")
+    st.error("Secretsにキーが設定されていません。")
     st.stop()
 
-# お手本画像
-STYLE_IMAGE_PATH = "style.jpg"
+# 画像読み込み
 style_img = None
-if os.path.exists(STYLE_IMAGE_PATH):
+if os.path.exists("style.jpg"):
     try:
-        style_img = Image.open(STYLE_IMAGE_PATH)
+        style_img = Image.open("style.jpg")
     except:
         pass
 
-# サイドバー
-with st.sidebar:
-    st.title("🐻 Shirokuma Studio")
-    if style_img:
-        st.image(style_img, caption="お手本スタイル", width=200)
-    uploaded_file = st.file_uploader("変換したい画像をアップロード", type=["png", "jpg", "jpeg"])
-
-# メイン画面
 st.title("🎨 しろくまスタイル変換")
 
-if uploaded_file:
-    try:
-        source_img = Image.open(uploaded_file)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(source_img, width=400)
-        with col2:
-            if st.button("しろくま呪文を生成", type="primary"):
-                if style_img is None:
-                    st.error("style.jpgが読み込めません。GitHubに画像を上げ直してください。")
-                else:
-                    with st.spinner("生成中..."):
-                        model = genai.GenerativeModel('gemini-1.5-flash-8b')
-                        prompt = "画像1のスタイルで、画像2の要素を持つシロクマの英語プロンプトを作ってください。"
-                        response = model.generate_content([prompt, style_img, source_img])
-                        st.session_state.result = response.text
-            
-            if "result" in st.session_state:
-                st.text_area("結果", value=st.session_state.result, height=150)
-                safe_text = st.session_state.result.replace("`", "\\`").replace("$", "\\$")
-                copy_js = f"""<button style="width:100%;height:40px;background:#4caf50;color:white;border:none;border-radius:8px;" onclick="navigator.clipboard.writeText(`{safe_text}`).then(()=>alert('コピー成功'))">📋 コピー</button>"""
-                components.html(copy_js, height=50)
-                st.link_button("🚀 ImageFXへ", "https://aitestkitchen.withgoogle.com/tools/image-fx")
-    except Exception as e:
-        st.error(f"エラー: {e}")
+uploaded_file = st.sidebar.file_uploader("画像をアップ", type=["png", "jpg", "jpeg"])
+
+if uploaded_file and style_img:
+    source_img = Image.open(uploaded_file)
+    
+    if st.button("呪文を生成"):
+        with st.spinner("AIが解析中..."):
+            try:
+                # 【ここを修正】最も標準的なモデル名に変更
+                # flashで404が出る場合は、この gemini-1.5-pro が正解のケースが多いです
+                model = genai.GenerativeModel('gemini-1.5-pro') 
+                
+                prompt = "画像1の画風で、画像2のポーズをしたクマを描く英語プロンプトを作ってください。"
+                response = model.generate_content([prompt, style_img, source_img])
+                st.write(response.text)
+                
+            except Exception as e:
+                # エラーが出た場合、別の名前で自動リトライ
+                try:
+                    model = genai.GenerativeModel('models/gemini-1.5-flash')
+                    response = model.generate_content([prompt, style_img, source_img])
+                    st.write(response.text)
+                except Exception as e2:
+                    st.error(f"モデルが見つかりません。APIキーの設定を確認してください。詳細: {e2}")
+
+elif not style_img:
+    st.warning("style.jpg が見つかりません。GitHubにアップロードされているか確認してください。")
