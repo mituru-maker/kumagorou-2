@@ -45,7 +45,7 @@ if uploaded_file:
                     st.error("style.jpgが読み込めません。GitHubに画像を上げ直してください。")
                 else:
                     with st.spinner("生成中..."):
-                        model = genai.GenerativeModel('gemini-1.5-prp-version')
+                        model = genai.GenerativeModel('gemini-1.5-pro-version')
                         prompt = "画像1のスタイルで、画像2の要素を持つシロクマの英語プロンプトを作ってください。"
                         response = model.generate_content([prompt, style_img, source_img])
                         st.session_state.result = response.text
