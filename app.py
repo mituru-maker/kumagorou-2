@@ -86,7 +86,7 @@ if uploaded_file and style_img:
         if st.button(f"{style_type}に合わせて呪文を生成"):
             with st.status(f"{style_type}のスタイルを分析中...") as status:
                 try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash-preview')
                     
                     instruction = f"""
                     あなたはキャラクターデザインのプロフェッショナルです。
