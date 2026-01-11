@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 import os
 
 # --- 1. ページ設定とデザイン ---
-st.set_page_config(page_title="しろくまスタイル・スタジオ", layout="wide")
+st.set_page_config(page_title="アニマル・スタイル・スタジオ", layout="wide")
 
 st.markdown("""
     <style>
@@ -16,40 +16,55 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. APIキーの設定 (Secretsから自動読み込み) ---
+# --- 2. APIキーの設定 ---
 if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("APIキーが設定されていません。StreamlitのSecretsに 'GEMINI_API_KEY' を登録してください。")
+    st.error("Secretsに 'GEMINI_API_KEY' を登録してください。")
     st.stop()
 
-# --- 3. お手本画像の読み込み ---
-STYLE_IMAGE_PATH = "style.jpg" 
-
-def get_style_image():
-    if os.path.exists(STYLE_IMAGE_PATH):
-        return Image.open(STYLE_IMAGE_PATH)
-    return None
-
-style_img = get_style_image()
-
-# --- 4. サイドバー ---
+# --- 3. サイドバー：お手本選択 ---
 with st.sidebar:
-    st.title("🐻 Shirokuma Studio")
-    st.caption("✅ APIキー接続済み")
+    st.title("🐾 Animal Studio")
     
-    st.divider()
-    if style_img:
-        st.subheader("🎨 ベーススタイル（固定）")
-        st.image(style_img, caption="このシロクマをお手本にします", use_container_width=True)
-    else:
-        st.error(f"エラー: '{STYLE_IMAGE_PATH}' が見つかりません。")
+    # お手本の種類を選択（3種類に絞り込み）
+    style_type = st.radio(
+        "お手本を選択してください：",
+        ["シロクマ", "カバ", "シャチ"],
+        index=0
+    )
 
+    # 選択に合わせてファイル名を決定
+    style_files = {
+        "シロクマ": "style.jpg",
+        "カバ": "hippo.jpg",
+        "シャチ": "orca.jpg"
+    }
+    target_file = style_files[style_type]
+
+    # 画像の読み込み
+    style_img = None
+    if os.path.exists(target_file):
+        style_img = Image.open(target_file)
+        st.subheader(f"🎨 {style_type}スタイル")
+        st.image(style_img, use_container_width=True)
+    else:
+        st.error(f"'{target_file}' が見つかりません。")
+        st.info(f"GitHubに {target_file} という名前で画像をアップロードしてください。")
+
+    st.divider()
     uploaded_file = st.file_uploader("変換したい元の画像", type=["png", "jpg", "jpeg"])
 
-# --- 5. メインコンテンツ ---
-st.title("🎨 しろくまスタイル変換ジェネレーター")
+# --- 4. メインコンテンツ ---
+st.title(f"🎨 {style_type}スタイル変換ジェネレーター")
+
+# 選択が変わったときに結果をリセット
+if "last_style" not in st.session_state:
+    st.session_state.last_style = style_type
+
+if st.session_state.last_style != style_type:
+    st.session_state.analysis_result = ""
+    st.session_state.last_style = style_type
 
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = ""
@@ -68,40 +83,27 @@ if uploaded_file and style_img:
         st.markdown('<div class="main-card">', unsafe_allow_html=True)
         st.subheader("📝 スタイル融合プロンプト")
         
-        if st.button("お手本に合わせて呪文を生成"):
-            with st.status("2枚の画像を融合して分析中...") as status:
+        if st.button(f"{style_type}に合わせて呪文を生成"):
+            with st.status(f"{style_type}のスタイルを分析中...") as status:
                 try:
-                    # 先ほど動作したモデル名を使用
-                    model = genai.GenerativeModel('gemini-3-flash-preview')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    instruction = """
-                    あなたは、既存のキャラクターデザインの「スタイル」を別の要素へ移植するプロフェッショナルです。
+                    instruction = f"""
+                    あなたはキャラクターデザインのプロフェッショナルです。
                     
-                    【入力データ】
-                    1. 画像1（お手本）: ターゲットとなるシロクマの「絵柄・スタイル」。
+                    1. 画像1（お手本）: ターゲットとなる{style_type}の特定の「絵柄・スタイル」。
                     2. 画像2（変換元）: 移植したい「服装・ポーズ・持ち物」。
 
-                    【あなたのタスク】
-                    画像1の「線の太さ」「色使い」「顔の描き方（目の位置や鼻の形）」を完璧に守ったまま、
-                    画像2のキャラクターがしている「格好やポーズ」を再現するための、画像生成AI用プロンプト（英語）を作成してください。
-
-                    【出力形式】
-                    ■分析（日本語）: 画像2のどの要素を、画像1のスタイルでどう再現するか。
-                    ■英語プロンプト: そのままコピーしてImageFX等の生成AIで使える、詳細な英文。
+                    画像1の「線の太さ」「色使い」「独特な顔の描き方」を完璧に守りつつ、
+                    画像2のキャラクターがしている「格好やポーズ」を{style_type}で再現するための、
+                    画像生成AI（ImageFX等）で使える詳細な英語プロンプトを作成してください。
                     """
                     
                     response = model.generate_content([instruction, style_img, source_img])
                     st.session_state.analysis_result = response.text
                     status.update(label="融合完了！", state="complete")
                 except Exception as e:
-                    # もし gemini-3-flash-preview が使えなかった時のための予備
-                    try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        response = model.generate_content([instruction, style_img, source_img])
-                        st.session_state.analysis_result = response.text
-                        status.update(label="融合完了！(v1.5)", state="complete")
-                    except Exception as e2:
-                        st.error(f"エラーが発生しました: {e2}")
+                    st.error(f"エラーが発生しました: {e}")
 
         if st.session_state.analysis_result:
             st.text_area("生成結果", value=st.session_state.analysis_result, height=200)
@@ -112,7 +114,7 @@ if uploaded_file and style_img:
                 <script>
                 function copyToClipboard() {{
                     const text = `{safe_text}`;
-                    navigator.clipboard.writeText(text).then(() => alert("プロンプトをクリップボードにコピーしました！"));
+                    navigator.clipboard.writeText(text).then(() => alert("プロンプトをコピーしました！"));
                 }}
                 </script>
                 <button class="copy-btn" onclick="copyToClipboard()">📋 プロンプトをコピー</button>
@@ -121,4 +123,7 @@ if uploaded_file and style_img:
             st.link_button("🚀 ImageFXを開く", "https://aitestkitchen.withgoogle.com/tools/image-fx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 else:
-    st.info("変換したい画像をアップロードしてください。")
+    if not style_img:
+        st.info(f"サイドバーで「{style_type}」の画像が正しく表示されているか確認してください。")
+    else:
+        st.info("変換したい画像をアップロードしてください。")
